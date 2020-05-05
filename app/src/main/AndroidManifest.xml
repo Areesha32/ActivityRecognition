@@ -18,15 +18,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".ActivityDetectionClass"
+            android:exported="false" />
+        <meta-data
+            android:name="preloaded_fonts"
+            android:resource="@array/preloaded_fonts" />
 
         <!-- Service that provides activity recognition data. Setting the android:exported attribute
        to "false" stops other apps from starting this service, even when using an explicit
        intent. -->
-        <service
-            android:name=".DetectedActivitiesIntentService"
-            android:exported="false" />
-
-        <service android:name=".BackgroundDetectedActivitiesService"></service>
 
     </application>
 

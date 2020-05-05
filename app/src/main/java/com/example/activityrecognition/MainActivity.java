@@ -1,242 +1,163 @@
 package com.example.activityrecognition;
 
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.localbroadcastmanager.content.LocalBroadcastManager;
-
-import android.annotation.SuppressLint;
-import android.app.ActivityManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.graphics.PorterDuff;
-import android.graphics.drawable.ColorDrawable;
-import android.os.Build;
+import android.content.res.Resources;
+import android.graphics.Typeface;
 import android.os.Bundle;
+import android.text.Spannable;
+import android.text.SpannableString;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.TypefaceSpan;
 import android.util.Log;
-import android.view.MotionEvent;
 import android.view.View;
-import android.view.Window;
-import android.view.WindowManager;
-import android.widget.Button;
-import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.res.ResourcesCompat;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.common.api.Status;
+import com.google.android.gms.location.ActivityRecognition;
 import com.google.android.gms.location.DetectedActivity;
 
-public class MainActivity extends AppCompatActivity {
+import java.util.ArrayList;
 
-    private String TAG = MainActivity.class.getSimpleName();
-    BroadcastReceiver broadcastReceiver;
-
-    private TextView txtActivity, txtConfidence;
-    private ImageView imgActivity;
-    private Button btnStartTrcking, btnStopTracking;
-
-
-    BackgroundDetectedActivitiesService ab;
-    static int v = 0;
+public class MainActivity extends AppCompatActivity implements GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, ResultCallback<Status> {
+    private GoogleApiClient mGoogleApiClient;
+    private TextView mDetectedActivityTextView;
+    private ActivityDetectionBroadcastReceiver mBroadcastReceiver;
+    private static final String TAG = "MainActivity";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        SpannableString s = new SpannableString("Google Activity Recognition");
+        Typeface myTypeface = Typeface.create(ResourcesCompat.getFont(this, R.font.nunito_extralight), Typeface.BOLD);
+        s.setSpan(new TypefaceSpan(myTypeface), 0, s.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        s.setSpan(new ForegroundColorSpan(0xFF000000), 0, s.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        setTitle(s);
 
-        txtActivity = findViewById(R.id.txt_activity);
-        txtConfidence = findViewById(R.id.txt_confidence);
-        imgActivity = findViewById(R.id.img_activity);
-        btnStartTrcking = findViewById(R.id.btn_start_tracking);
-        btnStopTracking = findViewById(R.id.btn_stop_tracking);
-
-        /*TextView pri = (TextView) findViewById(R.id.textView);
-
-
-
-
-        pri.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                startActivity(new Intent(MainActivity.this , BackgroundDetectedActivitiesService.class));
-            }
-        });*/
-
-        btnStartTrcking.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-
-                ab = new BackgroundDetectedActivitiesService();
-                // services not running already
-                // start services
-                if (!isMyServiceRunning(ab.getClass())) {
-
-
-                    txtActivity.setText("Loading ..... ");
-                    txtConfidence.setText("");
-                    imgActivity.setImageResource(android.R.drawable.screen_background_light_transparent);
-
-                    v =0;
-                    startTracking();
-
-                }
-
-                else{
-
-                    Toast.makeText(MainActivity.this,   "Service Already Running", Toast.LENGTH_LONG).show();
-
-                }
-
-
-            }
-        });
-
-        btnStopTracking.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                stopTracking();
-            }
-        });
-
-        broadcastReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                if (intent.getAction().equals(Constants.BROADCAST_DETECTED_ACTIVITY)) {
-                    int type = intent.getIntExtra("type", -1);
-                    int confidence = intent.getIntExtra("confidence", 0);
-                    handleUserActivity(type, confidence);
-                }
-            }
-        };
+        mBroadcastReceiver = new ActivityDetectionBroadcastReceiver();
+        mDetectedActivityTextView = (TextView) findViewById(R.id.detected_activities_textview);
+        mGoogleApiClient = new GoogleApiClient.Builder(this)
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .addApi(ActivityRecognition.API)
+                .build();
     }
 
-    private void handleUserActivity(int type, int confidence) {
-        String label = getString(R.string.activity_unknown);
-        int icon = R.drawable.ic_still;
+    @Override
+    protected void onStart() {
+        super.onStart();
+        mGoogleApiClient.connect();
+    }
 
-
-        switch (type) {
-            case DetectedActivity.IN_VEHICLE: {
-                label = getString(R.string.activity_in_vehicle);
-                icon = R.drawable.ic_driving;
-                break;
-            }
-            case DetectedActivity.ON_BICYCLE: {
-                label = getString(R.string.activity_on_bicycle);
-                icon = R.drawable.ic_on_bicycle;
-                break;
-            }
-            case DetectedActivity.ON_FOOT: {
-                label = getString(R.string.activity_on_foot);
-                icon = R.drawable.ic_walking;
-                break;
-            }
-            case DetectedActivity.RUNNING: {
-                label = getString(R.string.activity_running);
-                icon = R.drawable.ic_running;
-                break;
-            }
-            case DetectedActivity.STILL: {
-                label = getString(R.string.activity_still);
-                icon = R.drawable.ic_still;
-
-                break;
-            }
-            case DetectedActivity.TILTING: {
-                label = getString(R.string.activity_tilting);
-                icon = R.drawable.ic_tilting;
-                break;
-            }
-            case DetectedActivity.WALKING: {
-                label = getString(R.string.activity_walking);
-                icon = R.drawable.ic_walking;
-                break;
-            }
-            case DetectedActivity.UNKNOWN: {
-                label = getString(R.string.activity_unknown);
-                icon = R.drawable.ic_unknown;
-                break;
-            }
-            default: {
-                label = getString(R.string.activity_unknown);
-                icon = R.drawable.ic_unknown;
-                break;
-            }
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (mGoogleApiClient.isConnected()) {
+            mGoogleApiClient.disconnect();
         }
+    }
 
-        Log.e(TAG, "User activity: " + label + ", Confidence: " + confidence);
-
-
-
-        if(v ==0 ){
-
-
-            v = confidence;
-            txtActivity.setText(label);
-            txtConfidence.setText("Confidence: " + confidence);
-            imgActivity.setImageResource(icon);
-
+    public String getDetectedActivity(int detectedActivityType) {
+        Resources resources = this.getResources();
+        switch(detectedActivityType) {
+            case DetectedActivity.TILTING:
+                return resources.getString(R.string.activity_tilting);
+            case DetectedActivity.ON_BICYCLE:
+                return resources.getString(R.string.activity_on_bicycle);
+            case DetectedActivity.ON_FOOT:
+                return resources.getString(R.string.activity_on_foot);
+            case DetectedActivity.RUNNING:
+                return resources.getString(R.string.activity_running);
+            case DetectedActivity.WALKING:
+                return resources.getString(R.string.activity_walking);
+            case DetectedActivity.STILL:
+                return resources.getString(R.string.activity_still);
+            case DetectedActivity.IN_VEHICLE:
+                return resources.getString(R.string.activity_in_vehicle);
+            case DetectedActivity.UNKNOWN:
+                return resources.getString(R.string.activity_unknown);
+            default:
+                return resources.getString(R.string.unidentifiable_activity, detectedActivityType);
         }
-        else{
+    }
 
+    @Override
+    public void onConnected(Bundle bundle) {
+        Log.i(TAG, "Connected.");
+    }
 
-            if(confidence > 50){
+    @Override
+    public void onConnectionSuspended(int i) {
+        Log.i(TAG, "Connection suspended!");
+        mGoogleApiClient.connect();
+    }
 
-                v = confidence;
-                txtActivity.setText(label);
-                txtConfidence.setText("Confidence: " + confidence);
-                imgActivity.setImageResource(icon);
-
-
-            }
-
-            else if (v <= confidence) {
-
-                txtActivity.setText(label);
-                txtConfidence.setText("Confidence: " + confidence);
-                imgActivity.setImageResource(icon);
-            }
-        }
-
+    @Override
+    public void onConnectionFailed(ConnectionResult connectionResult) {
+        Log.i(TAG, "Connection failed. Error: " + connectionResult.getErrorCode());
     }
 
 
-
-    // check your background services
-    private boolean isMyServiceRunning(Class<?> serviceClass) {
-        ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
-        for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
-            if (serviceClass.getName().equals(service.service.getClassName())) {
-                Log.i ("Service status", "Running");
-                return true;
-            }
+    public void requestUpdatesHandler(View view) {
+        if (!mGoogleApiClient.isConnected()) {
+            Toast.makeText(this, "GoogleAPIClient not connected.", Toast.LENGTH_SHORT).show();
+        } else {
+            ActivityRecognition.ActivityRecognitionApi.requestActivityUpdates(mGoogleApiClient, 0, getActivityDetectionPendingIntent()).setResultCallback(this);
         }
-        Log.i ("Service status", "Not running");
-        return false;
     }
 
+    public void removeActivityUpdates(View view) {
+        ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(mGoogleApiClient, getActivityDetectionPendingIntent()).setResultCallback(this);
+        mDetectedActivityTextView.setText("");
+    }
+
+    private PendingIntent getActivityDetectionPendingIntent() {
+        Intent mIntent = new Intent(this, ActivityDetectionClass.class);
+        return PendingIntent.getService(this, 0, mIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+    }
+
+    public void onResult(Status statusOfActivity) {
+        if (statusOfActivity.isSuccess()) {
+            Log.e(TAG, "Successfully added activity detection!");
+
+        } else {
+            Log.e(TAG, "Error: " + statusOfActivity.getStatusMessage());
+        }
+    }
 
     @Override
     protected void onResume() {
         super.onResume();
-
-        LocalBroadcastManager.getInstance(this).registerReceiver(broadcastReceiver,
-                new IntentFilter(Constants.BROADCAST_DETECTED_ACTIVITY));
+        LocalBroadcastManager.getInstance(this).registerReceiver(mBroadcastReceiver, new IntentFilter(GlobalValues.STRING_ACTION));
     }
 
     @Override
     protected void onPause() {
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(mBroadcastReceiver);
         super.onPause();
-
-        LocalBroadcastManager.getInstance(this).unregisterReceiver(broadcastReceiver);
     }
 
-    private void startTracking() {
-        Intent intent = new Intent(MainActivity.this, BackgroundDetectedActivitiesService.class);
-        startService(intent);
-    }
-
-    private void stopTracking() {
-        Intent intent = new Intent(MainActivity.this, BackgroundDetectedActivitiesService.class);
-        stopService(intent);
+    public class ActivityDetectionBroadcastReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            ArrayList<DetectedActivity> detectedActivityArrayList = intent.getParcelableArrayListExtra(GlobalValues.STRING_EXTRA);
+            String activityString = "";
+            for(DetectedActivity activity: detectedActivityArrayList){
+                activityString +=  "Detected Activity: " + getDetectedActivity(activity.getType()) + " | Confidence: " + activity.getConfidence() + "%\n";
+            }
+            mDetectedActivityTextView.setText(activityString);
+        }
     }
 }
